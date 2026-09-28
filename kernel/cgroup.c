@@ -29,6 +29,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/cgroup.h>
+#include <linux/security.h>
 #include <linux/cred.h>
 #include <linux/ctype.h>
 #include <linux/errno.h>
@@ -2839,6 +2840,13 @@ static int cgroup_procs_write_permission(struct task_struct *task,
 		ret = -ENOMEM;
 		inode = kernfs_get_inode(sb, cgrp->procs_file.kn);
 		if (inode) {
+			/*
+			 * 3.10 SELinux labels an inode only when a dentry is instantiated;
+			 * this cgroup.procs inode may have none yet (e.g. the cgroup2 root at
+			 * boot), so it would be checked as unlabeled and every migration
+			 * denied. Initialise its label now; a no-op if it already has one.
+			 */
+			security_d_instantiate(NULL, inode);
 			ret = inode_permission(inode, MAY_WRITE);
 			iput(inode);
 		}
