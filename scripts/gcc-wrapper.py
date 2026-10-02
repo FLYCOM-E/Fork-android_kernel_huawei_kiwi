@@ -30,6 +30,8 @@
 # Invoke gcc, looking for warnings, and causing a failure if there are
 # non-whitelisted warnings.
 
+from __future__ import print_function
+
 import errno
 import re
 import os
@@ -73,18 +75,23 @@ def run_gcc():
 
     try:
         proc = subprocess.Popen(args, stderr=subprocess.PIPE)
+        # Python 3 reads the pipe as bytes: pass them through unchanged (gcc emits
+        # UTF-8 quotes) and decode only for the warning check. On Python 2,
+        # sys.stdout has no .buffer and takes the str lines as they are.
+        out = getattr(sys.stdout, 'buffer', sys.stdout)
         for line in proc.stderr:
-            print line,
-            interpret_warning(line)
+            out.write(line)
+            interpret_warning(line.decode('utf-8', 'replace'))
+        out.flush()
 
         result = proc.wait()
     except OSError as e:
         result = e.errno
         if result == errno.ENOENT:
-            print args[0] + ':',e.strerror
-            print 'Is your PATH set correctly?'
+            print(args[0] + ':', e.strerror)
+            print('Is your PATH set correctly?')
         else:
-            print ' '.join(args), str(e)
+            print(' '.join(args), str(e))
 
     return result
 
