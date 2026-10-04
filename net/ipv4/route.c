@@ -532,7 +532,7 @@ static void __build_flow_key(struct flowi4 *fl4, struct sock *sk,
 			   RT_SCOPE_UNIVERSE, prot,
 			   flow_flags,
 			   iph->daddr, iph->saddr, 0, 0,
-			   sk ? sock_i_uid(sk) : 0);
+			   sk ? sock_i_uid(sk) : GLOBAL_ROOT_UID);
 }
 
 static void build_skb_flow_key(struct flowi4 *fl4, const struct sk_buff *skb,
@@ -1157,7 +1157,7 @@ void ip_rt_get_source(u8 *addr, struct sk_buff *skb, struct rtable *rt)
 		fl4.flowi4_oif = rt->dst.dev->ifindex;
 		fl4.flowi4_iif = skb->dev->ifindex;
 		fl4.flowi4_mark = skb->mark;
-		fl4.flowi4_uid = skb->sk ? sock_i_uid(skb->sk) : 0;
+		fl4.flowi4_uid = skb->sk ? sock_i_uid(skb->sk) : GLOBAL_ROOT_UID;
 
 		rcu_read_lock();
 		if (fib_lookup(dev_net(rt->dst.dev), &fl4, &res) == 0)
@@ -1448,7 +1448,7 @@ static int ip_route_input_mc(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	rth->rt_iif	= 0;
 	rth->rt_pmtu	= 0;
 	rth->rt_gateway	= 0;
-	rth->rt_uid	= 0;
+	rth->rt_uid	= GLOBAL_ROOT_UID;
 	rth->rt_uses_gateway = 0;
 	INIT_LIST_HEAD(&rth->rt_uncached);
 	if (our) {
@@ -1572,7 +1572,7 @@ static int __mkroute_input(struct sk_buff *skb,
 	rth->rt_is_input = 1;
 	rth->rt_iif 	= 0;
 	rth->rt_pmtu	= 0;
-	rth->rt_uid	= 0;
+	rth->rt_uid	= GLOBAL_ROOT_UID;
 	rth->rt_gateway	= 0;
 	rth->rt_uses_gateway = 0;
 	INIT_LIST_HEAD(&rth->rt_uncached);
@@ -1745,7 +1745,7 @@ local_input:
 	rth->rt_is_input = 1;
 	rth->rt_iif	= 0;
 	rth->rt_pmtu	= 0;
-	rth->rt_uid	= 0;
+	rth->rt_uid	= GLOBAL_ROOT_UID;
 	rth->rt_gateway	= 0;
 	rth->rt_uses_gateway = 0;
 	INIT_LIST_HEAD(&rth->rt_uncached);
@@ -2336,9 +2336,10 @@ static int rt_fill_info(struct net *net,  __be32 dst, __be32 src,
 	    nla_put_u32(skb, RTA_MARK, fl4->flowi4_mark))
 		goto nla_put_failure;
 
-	if (rt->rt_uid != (uid_t) -1 &&
-	    nla_put_u32(skb, RTA_UID, rt->rt_uid))
-		goto nla_put_failure;
+	if (!uid_eq(rt->rt_uid, INVALID_UID) &&
+		nla_put_u32(skb, RTA_UID,
+			from_kuid_munged(current_user_ns(), rt->rt_uid)))
+				goto nla_put_failure;
 
 	error = rt->dst.error;
 
