@@ -23,5 +23,9 @@
 };
 
 &pm8916_bms {
-	status = "disabled";
+	status = "ok";
+};
+
+&pm8916_chg {
+	qcom,bpd-detection = "bpd_thm";
 };
