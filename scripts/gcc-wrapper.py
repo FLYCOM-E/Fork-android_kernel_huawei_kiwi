@@ -75,10 +75,14 @@ def run_gcc():
 
     try:
         proc = subprocess.Popen(args, stderr=subprocess.PIPE)
-        # Python 3 reads the pipe as bytes: pass them through unchanged (gcc emits
-        # UTF-8 quotes) and decode only for the warning check. On Python 2,
-        # sys.stdout has no .buffer and takes the str lines as they are.
-        out = getattr(sys.stdout, 'buffer', sys.stdout)
+        # Compiler diagnostics go back to stderr, never stdout: the kernel Makefile
+        # captures stdout of $(CC) in $(shell ...) (e.g. LIBGCC via
+        # -print-libgcc-file-name), so one warning from a compiler front-end such as
+        # ccache would land in libs-y and break the vmlinux rule ("multiple target
+        # patterns"). Python 3 reads the pipe as bytes: pass them through unchanged
+        # (gcc emits UTF-8 quotes) and decode only for the warning check. On
+        # Python 2, sys.stderr has no .buffer and takes the str lines as they are.
+        out = getattr(sys.stderr, 'buffer', sys.stderr)
         for line in proc.stderr:
             out.write(line)
             interpret_warning(line.decode('utf-8', 'replace'))
@@ -88,10 +92,10 @@ def run_gcc():
     except OSError as e:
         result = e.errno
         if result == errno.ENOENT:
-            print(args[0] + ':', e.strerror)
-            print('Is your PATH set correctly?')
+            print(args[0] + ':', e.strerror, file=sys.stderr)
+            print('Is your PATH set correctly?', file=sys.stderr)
         else:
-            print(' '.join(args), str(e))
+            print(' '.join(args), str(e), file=sys.stderr)
 
     return result
 
