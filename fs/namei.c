@@ -4201,8 +4201,18 @@ int vfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 }
 EXPORT_SYMBOL(vfs_rename);
 
-SYSCALL_DEFINE4(renameat, int, olddfd, const char __user *, oldname,
-		int, newdfd, const char __user *, newname)
+/*
+ * kiwi: Linux 3.15's value. Defined here rather than in include/uapi so the
+ * exported kernel headers cannot clash with bionic's own RENAME_* macros.
+ */
+#ifndef RENAME_NOREPLACE
+#define RENAME_NOREPLACE	(1 << 0)	/* Don't overwrite target */
+#endif
+
+/* kiwi: the body of renameat(), shared with renameat2() */
+static int do_renameat2(int olddfd, const char __user *oldname,
+			int newdfd, const char __user *newname,
+			unsigned int flags)
 {
 	struct dentry *old_dir, *new_dir;
 	struct dentry *old_dentry, *new_dentry;
@@ -4277,6 +4287,14 @@ retry:
 	error = -ENOTEMPTY;
 	if (new_dentry == trap)
 		goto exit5;
+	/*
+	 * kiwi: RENAME_NOREPLACE the way Linux 3.15 does it: lock_rename() holds
+	 * both parents' i_mutex, so the target cannot appear between this check
+	 * and the rename; the filesystem itself only ever sees a plain rename.
+	 */
+	error = -EEXIST;
+	if ((flags & RENAME_NOREPLACE) && new_dentry->d_inode)
+		goto exit5;
 
 	error = security_path_rename(&oldnd.path, old_dentry,
 				     &newnd.path, new_dentry);
@@ -4310,18 +4328,22 @@ exit:
 
 /*
  * kiwi: Android 14's bionic implements rename() and renameat() with renameat2,
- * so without this syscall every rename() fails with ENOSYS (vold, init's
- * persistent properties, derive_classpath...). This VFS has no
- * RENAME_NOREPLACE / RENAME_EXCHANGE / RENAME_WHITEOUT, so only flags == 0 is
- * accepted, which is a plain renameat(); callers that pass flags get -EINVAL,
- * the documented answer from filesystems that do not support them.
+ * and netbpfload pins every BPF map and program with RENAME_NOREPLACE.
+ * RENAME_EXCHANGE and RENAME_WHITEOUT are not supported by this VFS and get
+ * -EINVAL, the documented answer from filesystems that lack them.
  */
 SYSCALL_DEFINE5(renameat2, int, olddfd, const char __user *, oldname,
 		int, newdfd, const char __user *, newname, unsigned int, flags)
 {
-	if (flags)
+	if (flags & ~RENAME_NOREPLACE)
 		return -EINVAL;
-	return sys_renameat(olddfd, oldname, newdfd, newname);
+	return do_renameat2(olddfd, oldname, newdfd, newname, flags);
+}
+
+SYSCALL_DEFINE4(renameat, int, olddfd, const char __user *, oldname,
+		int, newdfd, const char __user *, newname)
+{
+	return do_renameat2(olddfd, oldname, newdfd, newname, 0);
 }
 
 SYSCALL_DEFINE2(rename, const char __user *, oldname, const char __user *, newname)
