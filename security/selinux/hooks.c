@@ -713,8 +713,15 @@ static int selinux_set_mnt_opts(struct super_block *sb,
 	if (strcmp(sb->s_type->name, "proc") == 0)
 		sbsec->flags |= SE_SBPROC | SE_SBGENFS;
 
+	/*
+	 * kiwi: "bpf", as in upstream "selinux: allow per-file labeling for
+	 * bpffs". Android 14 labels /sys/fs/bpf/<dir> through
+	 * genfscon (fs_bpf_net_shared, ...); without per-file labels everything
+	 * stays fs_bpf and system_server aborts in ClatCoordinator's checks.
+	 */
 	if (!strcmp(sb->s_type->name, "debugfs") ||
 	    !strcmp(sb->s_type->name, "sysfs") ||
+	    !strcmp(sb->s_type->name, "bpf") ||
 	    !strcmp(sb->s_type->name, "pstore"))
 		sbsec->flags |= SE_SBGENFS;
 
