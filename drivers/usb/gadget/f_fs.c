@@ -1109,7 +1109,16 @@ ffs_epfile_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static int ffs_aio_cancel(struct kiocb *kiocb)
+/*
+ * 3.10 AIO contract (see fs/aio.c kiocb_cancel() and gadgetfs ep_aio_cancel()):
+ * the cancel callback gets (kiocb, io_event), and kiocb_cancel() takes an extra
+ * reference on the kiocb that the callback must drop with aio_put_req(). The
+ * mainline version this was backported from has neither. Without the put, every
+ * request cancelled when adbd exits leaks a kiocb, the kiocb keeps its ep file
+ * open, ffs->opened never returns to 0, and the next adbd gets EBUSY on ep0
+ * forever (adb root / adbd restart never reconnects until reboot).
+ */
+static int ffs_aio_cancel(struct kiocb *kiocb, struct io_event *event)
 {
 	struct ffs_io_data *io_data = kiocb->private;
 	struct ffs_epfile *epfile = kiocb->ki_filp->private_data;
@@ -1121,6 +1130,8 @@ static int ffs_aio_cancel(struct kiocb *kiocb)
 	else
 		value = -EINVAL;
 	spin_unlock_irq(&epfile->ffs->eps_lock);
+
+	aio_put_req(kiocb);
 	return value;
 }
 static ssize_t ffs_epfile_aio_write(struct kiocb *kiocb,
