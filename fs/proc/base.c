@@ -948,7 +948,8 @@ static ssize_t oom_adj_write(struct file *file, const char __user *buf,
 	}
 
 	qmp_sphinx_logk_oom_adjust_write(task->pid,
-			task->cred->uid, oom_adj);
+			from_kuid_munged(current_user_ns(),
+			task->cred->uid), oom_adj);
 
 	task_lock(task);
 	if (!task->mm) {
@@ -1054,7 +1055,8 @@ static ssize_t oom_score_adj_write(struct file *file, const char __user *buf,
 	}
 
 	qmp_sphinx_logk_oom_adjust_write(task->pid,
-			task->cred->uid, oom_score_adj);
+			from_kuid_munged(current_user_ns(),
+			task->cred->uid), oom_score_adj);
 
 	task_lock(task);
 	if (!task->mm) {
